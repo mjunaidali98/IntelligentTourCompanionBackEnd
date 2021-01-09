@@ -1,21 +1,18 @@
 var express = require('express');
+var express = require('express');
 var router = express.Router();
-const TopPlaces = require('../models/topDestinations');
 var authenticate = require('../spauthenticate');
 const bodyParser = require('body-parser');
-var Business = require('../models/business');
+var User = require('../models/business');
 var nodemailer = require('nodemailer');
 var passport = require('passport');
-const contactus = require('../models/contactus');
-const transport = require('../models/transport');
-const guide = require('../models/guide');
 var currentuser = '';
-var loginId = null;
 var multer = require('multer');
-const cors = require('./cors');
 const path = require('path');
 const fileUpload = require('express-fileupload');
-const { error } = require('console');
+const guide = require('../models/guide');
+var Vehicles = require('../models/vehicles');
+var transport = require('../models/transport');
 
 var storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -32,6 +29,8 @@ router.use(bodyParser.json());
 
 var transporter = nodemailer.createTransport({
   service: 'gmail',
+  port: 465,
+  secure: true,
   auth: {
     user: 'itourcompanion@gmail.com',
     pass: 'siddiqui1',
@@ -39,15 +38,19 @@ var transporter = nodemailer.createTransport({
 });
 
 /* GET users listing. */
-router.get('/', authenticate.verifyUser, async (req, res, next) => {
-  res.json(req.user);
-});
+router.get(
+  '/',
+  passport.authenticate('jwt', { session: false }),
+  async (req, res, next) => {
+    res.json(req.user);
+  }
+);
 
 //UserRegister and Authenticate
 router.post('/sendOTP', (req, res, next) => {
   const { email } = req.body;
   const { username } = req.body;
-  Business.findOne({ email }).exec((err, user) => {
+  User.findOne({ email }).exec((err, user) => {
     if (user) {
       return res.status(400).json({ error: ' User Email already' });
     } else {
@@ -78,18 +81,18 @@ router.post('/sendOTP', (req, res, next) => {
     }
   });
 });
+
 router.post('/savetoDatabase', (req, res, next) => {
   const { email } = req.body.email;
   const { username } = req.body.username;
 
-  Business.register(
+  User.register(
     {
       username: req.body.username,
       firstname: req.body.firstname,
       lastname: req.body.lastname,
       email: req.body.email,
       phone: req.body.phone,
-      admin: req.body.admin,
     },
     req.body.password,
     (err, user) => {
@@ -98,7 +101,7 @@ router.post('/savetoDatabase', (req, res, next) => {
         res.statusCode = 400;
         res.json({ err: err, success: false });
       } else {
-        let authenticate = Business.authenticate();
+        let authenticate = User.authenticate();
         authenticate(req.body.username, req.body.password, (errr, result) => {
           if (errr)
             res.json({
@@ -117,11 +120,17 @@ router.post('/savetoDatabase', (req, res, next) => {
   );
 });
 
-router.post('/login', passport.authenticate('local'), (req, res) => {
-  var token = authenticate.getToken({ _id: req.user._id });
-  loginId = req.user._id;
-  currentuser = req.user;
-  res.setHeader('Content-Type', 'application/json');
+router.post('/login', authenticate.verifyUser, (req, res) => {
+  try {
+    var token = authenticate.getToken({ _id: req.user._id });
+    loginId = req.user._id;
+    currentuser = req.user;
+    res.setHeader('Content-Type', 'application/json');
+  } catch (err) {
+    res.json({
+      err: err,
+    });
+  }
   res.status(200).json({
     success: true,
     token: token,
@@ -129,6 +138,37 @@ router.post('/login', passport.authenticate('local'), (req, res) => {
     user: req.user,
     admin: req.user.admin,
   });
+});
+
+//Change password
+router.route('/changepass').post((req, res, next) => {
+  currentuser.changePassword(
+    req.body.oldpassword,
+    req.body.newpassword,
+    function (err) {
+      if (err) {
+        return next(err);
+      } else console.log('Password change sucessfully');
+      res.setHeader('Content-Type', 'application/json');
+      res.statusCode = 200;
+      res.json({
+        success: false,
+        status: 'Password Matched',
+      });
+    }
+  );
+});
+
+router.get('/logout', (req, res) => {
+  if (req.session) {
+    req.session.destroy();
+    res.clearCookie('session-id');
+    res.redirect('/');
+  } else {
+    var err = new Error('You are not logged in!');
+    err.status = 403;
+    next(err);
+  }
 });
 
 //Change password
@@ -206,10 +246,8 @@ router.get('/viewTopPlaces', function (req, res, next) {
     }
   });
 });
-
 //userdetails
-router.route('/transport').post(upload, (req, res, next) => {
-  console.log('image' + req.body.image);
+router.route('/transport').post((req, res, next) => {
   transport.create(req.body, (error, data) => {
     if (error) {
       return next(error);
@@ -220,23 +258,28 @@ router.route('/transport').post(upload, (req, res, next) => {
   });
 });
 
+//Add new vehicle to previous one
 router.route('/addvehicle').post((req, res, next) => {
-  var id = currentuser._id;
-  console.log('recieved is ' + req.body.vehicles[0]);
+  var id = currentuser._id.toString();
+  console.log('recieved is ' + req.body.vehicles[0].companyname);
   transport.find({ userid: id }, function (err, data) {
     if (err) console.log(err);
     else {
       var thisuser = data;
-      console.log('thisuseris' + thisuser);
-      thisuser.vehicles[0].companyname = req.body.vehicles.companyname;
-      console.log('thisuser ' + thisuser.vehicles[0].companyname);
-    }
-  });
-  transport.findOneAndUpdate({ userid: id }, function (err, data) {
-    var temp = req.body.vehicles[0];
-    if (err) console.log(err);
-    else {
-      console.log('temp' + data);
+      console.log('current user details' + thisuser);
+      thisuser[0].vehicles.push(req.body.vehicles[0]);
+      console.log('Final user is :' + thisuser);
+      transport.updateOne(
+        { userid: id },
+        { vehicles: thisuser[0].vehicles },
+        function (err, result) {
+          if (err) console.log(err);
+          else {
+            console.log('Vehicle added sucessfully');
+            res.status(200).send();
+          }
+        }
+      );
     }
   });
 });
@@ -244,14 +287,149 @@ router.route('/addvehicle').post((req, res, next) => {
 //persontransportdetails
 router.get('/transportdetails', function (req, res) {
   transport.find({ userid: currentuser._id }, function (err, data) {
-    if (err) console.log(err);
-    else {
-      res.json(data);
-      // console.log(data);
+    if (err) {
+      console.log(err);
+      res.status(400).json({
+        success: 0,
+        error: 'Failed loading transport details',
+      });
+    } else {
+      console.log(data);
+      res.status(200).json({
+        success: 1,
+        data,
+      });
     }
   });
 });
 
+//DeleteVehicle
+router.delete('/deletevehicle/:id', function (req, res) {
+  console.log('zee' + req.params.id);
+  transport.update(
+    { userid: currentuser._id },
+    { $pull: { vehicles: { _id: req.params.id } } },
+
+    function (err, result) {
+      if (err) {
+        console.log('cannot remove this shit');
+        return console.error(err);
+      } else {
+        console.log('Vehicle successfully removed from polls collection!');
+        res.status(200).send();
+      }
+    }
+  );
+});
+
+//deleteuserdetails
+router.delete('/deleteuserdetails/:id', function (req, res) {
+  console.log('id:' + JSON.stringify(req.body));
+  transport.remove({}, { $pull: { userid: req.body } }, (error, data) => {
+    if (error) {
+      return error;
+    } else {
+      console.log('Remove success!');
+      res.status(200).json({
+        msg: data,
+      });
+    }
+  });
+});
+
+//edit user details for vehicles
+router.post('/edittransportdetails', function (req, res) {
+  transport.findOneAndUpdate(
+    { userid: currentuser._id },
+    {
+      nicno: req.body.nicno,
+      phone: req.body.phone,
+      city: req.body.city,
+      address: req.body.address,
+      email: req.body.email,
+    },
+    function (err, result) {
+      if (err) {
+        console.log('cannot update the user details');
+        return console.error(err);
+      } else {
+        console.log('User vehicles are sucessfully upadted');
+        console.log(result);
+        res.status(200).send();
+      }
+    }
+  );
+});
+
+//editvehicledetails
+
+router.post('/editvehicledetails', function (req, res) {
+  console.log('id: ' + req.body.vehicleId);
+  transport.findOneAndUpdate(
+    { userid: currentuser._id, 'vehicles._id': req.body.vehicleId },
+    {
+      $set: {
+        'vehicles.$.companyname': req.body.companyname,
+        'vehicles.$.modelname': req.body.modelname,
+        'vehicles.$.priceWithoutDriver': req.body.priceWithoutDriver,
+        'vehicles.$.image': req.body.image,
+        'vehicles.$.modelyear': req.body.modelyear,
+        'vehicles.$.vehiclereg': req.body.vehiclereg,
+        'vehicles.$.priceWithDriver': req.body.priceWithDriver,
+      },
+    },
+    function (err, result) {
+      if (err) {
+        console.log('cannot update the user details');
+        return res.status(400).json({
+          err,
+        });
+      } else {
+        console.log('User Vehicle details are sucessfully upadted');
+        res.status(200).json({
+          success: true,
+          result,
+        });
+      }
+    }
+  );
+});
+
+//change availibity of the vehicles by user
+
+router.post('/vehicleisavailable', function (req, res) {
+  console.log('id: ' + req.body.vehicleId);
+  console.log('available: ' + req.body.available);
+  transport.findOneAndUpdate(
+    { userid: currentuser._id, 'vehicles._id': req.body.vehicleId },
+    {
+      $set: {
+        'vehicles.$.available': req.body.available,
+      },
+    },
+    function (err, result) {
+      if (err) {
+        console.log('cannot update the user details');
+        return console.error(err);
+      } else {
+        console.log('User Vehicle details are sucessfully upadted');
+        res.status(200).send();
+      }
+    }
+  );
+});
+
+//search transport across the country
+router.get('/searchtransport', function (req, res) {
+  console.log('city: ' + req.body.city);
+  transport.find({ city: req.body.city }, function (err, data) {
+    if (err) console.log(err);
+    else {
+      console.log('Data is ' + data);
+      res.json(data);
+    }
+  });
+});
 router.get('/guideDetail', function (req, res) {
   guide.find({ userid: loginId }, function (err, data) {
     if (err) console.log(err);

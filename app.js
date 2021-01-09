@@ -12,8 +12,6 @@ var spRouter = require('./routes/serviceProvider');
 var passport = require('passport');
 var config = require('./config');
 var cors = require('cors');
-var authenticate = require('./authenticate');
-
 var User = require('./models/user');
 const JwtStrategy = require('passport-jwt').Strategy;
 var ExtractJwt = require('passport-jwt').ExtractJwt;
@@ -28,6 +26,7 @@ exports.getToken = function (user) {
 var opts = {};
 opts.jwtFromRequest = ExtractJwt.fromAuthHeaderAsBearerToken();
 opts.secretOrKey = config.secretKey;
+
 passport.use(
   new JwtStrategy(opts, function (jwt_payload, done) {
     console.log('JWT payload :' + jwt_payload);
@@ -57,6 +56,7 @@ exports.verifyAdmin = (req, res, next) => {
     }
   });
 };
+
 const connection = mongoose.connect(
   'mongodb+srv://juni:1234@itc.ji9od.mongodb.net/itcDB?retryWrites=true&w=majority',
   {
@@ -95,7 +95,6 @@ app.use('/', indexRouter);
 app.use('/users', usersRouter);
 app.use('/admin', adminRouter);
 app.use('/serviceProvider', spRouter);
-
 // catch 404 and forward to error handler
 app.use(function (req, res, next) {
   next(createError(404));

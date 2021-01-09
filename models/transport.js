@@ -3,6 +3,7 @@ var schema = mongoose.Schema;
 var transport = new schema({
   nicno: {
     type: Number,
+    default: '',
   },
   userid: {
     type: mongoose.SchemaTypes.ObjectId,

@@ -16,9 +16,7 @@ const path = require('path');
 const fileUpload = require('express-fileupload');
 const guide = require('../models/guide');
 var Vehicles = require('../models/vehicles');
-var Tags = require("../models/tag")
-
-
+var Tags = require('../models/tag');
 
 var storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -100,7 +98,7 @@ router.post('/savetoDatabase', (req, res, next) => {
       email: req.body.email,
       phone: req.body.phone,
       admin: req.body.admin,
-      tags: req.body.tags
+      tags: req.body.tags,
     },
     req.body.password,
     (err, user) => {
@@ -488,10 +486,9 @@ router.get('/guide/:city', function (req, res, next) {
   });
 });
 
-//Trips saving 
+//Trips saving
 
 router.route('/addTrip').post((req, res, next) => {
-
   const tourObject = {
     locationTimeInterval: req.body.locationTimeInterval,
     poiTimeIntervals: req.body.poiTimeIntervals,
@@ -517,7 +514,6 @@ router.route('/addTrip').post((req, res, next) => {
     vehiclePrice: req.body.vehiclePrice,
     budget: req.body.budget,
     tags: req.body.tags,
-
   };
   Trips.create(tourObject, (error, data) => {
     if (error) {
@@ -529,7 +525,7 @@ router.route('/addTrip').post((req, res, next) => {
   });
 });
 
-//view tours 
+//view tours
 router.get('/viewtours', function (req, res) {
   Trips.find({ userid: currentuser._id }, function (err, data) {
     if (err) console.log(err);
@@ -550,7 +546,6 @@ router.delete('/deletetour/:id', function (req, res) {
     function (err, user) {
       if (err) {
         return console.error(err);
-
       }
       console.log('Tour is successfully removed from polls collection!');
       res.status(200).send();
@@ -561,14 +556,13 @@ router.delete('/deletetour/:id', function (req, res) {
 //userplantrip vehicles
 
 router.get('/getTransport', (req, res) => {
-
   Vehicles.find({}, (err, results) => {
     if (err) {
-      console.log(err)
+      console.log(err);
       res.status(400).json({
         success: 0,
-        error: "Cannot Get transport"
-      })
+        error: 'Cannot Get transport',
+      });
     }
     res.status(200).json({
       results,
@@ -577,32 +571,31 @@ router.get('/getTransport', (req, res) => {
   });
 });
 
-router.get("/getTags", (req, res) => {
-
+router.get('/getTags', (req, res) => {
   let tagWeather = [];
   let tagHotels = [];
   let tagLocations = [];
   let tagTrips = [];
   Tags.find({}, (err, results) => {
     if (err) {
-      console.log(err)
+      console.log(err);
       res.status(400).json({
         success: 0,
-        error: "Cannot Get Tags"
-      })
+        error: 'Cannot Get Tags',
+      });
     } else {
       for (let i = 0; i < results.length; i++) {
-        if (results[i].category === "weather") {
-          tagWeather.push(results[i])
+        if (results[i].category === 'weather') {
+          tagWeather.push(results[i]);
         }
-        if (results[i].category === "Hotels") {
-          tagHotels.push(results[i])
+        if (results[i].category === 'Hotels') {
+          tagHotels.push(results[i]);
         }
-        if (results[i].category === "terrain") {
-          tagLocations.push(results[i])
+        if (results[i].category === 'terrain') {
+          tagLocations.push(results[i]);
         }
-        if (results[i].category === "trip duration") {
-          tagTrips.push(results[i])
+        if (results[i].category === 'trip duration') {
+          tagTrips.push(results[i]);
         }
       }
       res.status(200).json({
@@ -614,30 +607,36 @@ router.get("/getTags", (req, res) => {
         message: 'data found',
       });
     }
-  })
-})
-
-router.get("/showRecommendedTrips", passport.authenticate('jwt', { session: false }), async (req, res) => {
-  let trips = await Trips.find({});
-  trips = trips.filter(T => (Array.isArray(T.tags) && T.userid.toString() !== req.user_id));
-  console.log(req.user.tags);
-  trips = trips.map(T => {
-    T = T.toJSON();
-    let hits = T.tags.reduce((current, TR) => {
-      let find = req.user.tags.find(T => T.toString() == TR.toString());
-      if (find) return (current + 1);
-      return current;
-    }, 0)
-    return {
-      ...T,
-      hits
-    }
-  });
-
-  trips.sort((TA, TB) => TB.hits - TA.hits);
-  res.json({
-    trips: trips
   });
 });
+
+router.get(
+  '/showRecommendedTrips',
+  passport.authenticate('jwt', { session: false }),
+  async (req, res) => {
+    let trips = await Trips.find({});
+    trips = trips.filter(
+      (T) => Array.isArray(T.tags) && T.userid.toString() !== req.user_id
+    );
+    console.log(req.user.tags);
+    trips = trips.map((T) => {
+      T = T.toJSON();
+      let hits = T.tags.reduce((current, TR) => {
+        let find = req.user.tags.find((T) => T.toString() == TR.toString());
+        if (find) return current + 1;
+        return current;
+      }, 0);
+      return {
+        ...T,
+        hits,
+      };
+    });
+
+    trips.sort((TA, TB) => TB.hits - TA.hits);
+    res.json({
+      trips: trips,
+    });
+  }
+);
 
 module.exports = router;
